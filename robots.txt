@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /models/
+Disallow: /token.json
+
+Sitemap: https://cv.anvart.ru/sitemap.xml
+
+Host: cv.anvart.ru

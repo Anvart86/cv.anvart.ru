@@ -1,0 +1,18 @@
+models/
+node_modules/
+token.json
+package.json
+package-lock.json
+refresh-token.sh
+refresh-token-local.sh
+photo-original.png
+PLAN.md
+IMPROVEMENTS.md
+extract-svf.mjs
+.env
+
+# Stale staging duplicate (real deploy target is /home/anvar/5D/cv-site/)
+/cv-site/
+
+# Reference screenshots, not site assets
+обучение студентов.png
