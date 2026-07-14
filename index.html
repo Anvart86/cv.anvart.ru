@@ -1208,7 +1208,7 @@
     <!-- 3D Viewer Overlay -->
     <div class="viewer-overlay" id="viewer-overlay">
         <div class="viewer-toolbar">
-            <span class="viewer-toolbar-title">3D BIM Модель</span>
+            <span class="viewer-toolbar-title">3D BIM Модель — Snowdon Towers (образец Autodesk)</span>
             <button type="button" class="viewer-close-btn" id="viewer-close" aria-label="Закрыть">&times;</button>
         </div>
         <div class="viewer-container" id="viewer-container">
@@ -1222,7 +1222,8 @@
     <script>
     (function() {
         var VIEWER_CDN = 'https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/';
-        var MODEL_URN = 'dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLkpSZ2RnVWJPUVphZG8wdnpOVU9NUXc_dmVyc2lvbj0x';
+        // Snowdon Towers Sample Architectural — образцовая модель из комплекта Revit 2026 (SVF2, Master View)
+        var MODEL_URN = 'dXJuOmFkc2sub2JqZWN0czpvcy5vYmplY3Q6YW52YXJ0LWN2LWU5ODA4MzE5ODdjMy9zbm93ZG9uLXRvd2Vycy1zYW1wbGUtYXJjaGl0ZWN0dXJhbC5ydnQ';
         var TOKEN_URL = 'token.json';
 
         var overlay = document.getElementById('viewer-overlay');
@@ -1343,7 +1344,25 @@
 
                 var documentId = 'urn:' + MODEL_URN;
                 Autodesk.Viewing.Document.load(documentId, function onDocLoaded(doc) {
-                    var viewable = doc.getRoot().getDefaultGeometry();
+                    // Берём сводный вид (Master View) — в нём вся модель.
+                    // Дисциплинарные виды показали бы «одни стены», а getDefaultGeometry(true)
+                    // в этой модели выбирает пустой вид легенд — поэтому отбираем вручную:
+                    // мастер-вид, не легенды, самый крупный по объёму геометрии.
+                    var root = doc.getRoot();
+                    var views3d = root.search({ type: 'geometry', role: '3d' }) || [];
+                    var notLegend = function(v) {
+                        var d = v.data || {};
+                        return !/legend/i.test(d.name || '') && !/legend/i.test(d.phaseNames || '');
+                    };
+                    var bySizeDesc = function(a, b) {
+                        return ((b.data && b.data.size) || 0) - ((a.data && a.data.size) || 0);
+                    };
+                    var isMaster = function(v) {
+                        return typeof v.isMasterView === 'function' && v.isMasterView();
+                    };
+                    var viewable = views3d.filter(function(v) { return isMaster(v) && notLegend(v); }).sort(bySizeDesc)[0]
+                        || views3d.filter(notLegend).sort(bySizeDesc)[0]
+                        || root.getDefaultGeometry();
                     if (!viewable) {
                         viewerLoading = false;
                         showError('3D-вид не найден в модели');
