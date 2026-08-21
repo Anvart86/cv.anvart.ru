@@ -38,6 +38,7 @@
     <meta property="og:image" content="https://cv.anvart.ru/og-image.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Анвар Тухватуллин — руководитель по цифровизации строительства, BIM/ТИМ и AI">
     <meta property="og:locale" content="ru_RU">
     <meta property="profile:first_name" content="Анвар">
     <meta property="profile:last_name" content="Тухватуллин">
@@ -47,6 +48,7 @@
     <meta name="twitter:title" content="Анвар Тухватуллин — Руководитель по цифровизации строительства">
     <meta name="twitter:description" content="BIM/ТИМ эксперт с 16+ годами опыта. 5D BIM, AI-автоматизация строительства.">
     <meta name="twitter:image" content="https://cv.anvart.ru/og-image.png">
+    <meta name="twitter:image:alt" content="Анвар Тухватуллин — руководитель по цифровизации строительства, BIM/ТИМ и AI">
 
     <!-- Search engines verification -->
     <meta name="yandex-verification" content="574d7a5fe172fe86">
@@ -103,7 +105,6 @@
 
         ym(111807312, 'init', {webvisor:true, clickmap:true, accurateTrackBounce:true, trackLinks:true});
     </script>
-    <noscript><div><img src="https://mc.yandex.ru/watch/111807312" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
     <!-- /Yandex.Metrika counter -->
 
     <link rel="icon" type="image/png" href="favicon.png">
@@ -172,7 +173,7 @@
         }
 
         html {
-            font-size: 15px;
+            font-size: 16px;
             scroll-behavior: smooth;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
@@ -221,6 +222,13 @@
                 opacity: 1;
                 transform: none;
                 transition: none;
+            }
+            .viewer-overlay,
+            body {
+                transition: none;
+            }
+            .viewer-spinner-icon {
+                animation: none;
             }
         }
 
@@ -313,8 +321,8 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 28px;
-            height: 28px;
+            width: 38px;
+            height: 38px;
             color: var(--color-muted);
             background: var(--color-surface);
             border: 1px solid var(--color-border);
@@ -329,8 +337,8 @@
         }
 
         .contact-link svg {
-            width: 14px;
-            height: 14px;
+            width: 18px;
+            height: 18px;
         }
 
         /* ===== SUMMARY ===== */
@@ -634,9 +642,18 @@
 
         /* ===== PDF DOWNLOAD BUTTON ===== */
         .contact-link--accent {
+            width: auto;
+            padding: 0 0.875rem;
+            gap: 0.4rem;
             background: var(--color-accent);
             color: var(--color-on-accent);
             border-color: var(--color-accent);
+        }
+
+        .contact-link-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            white-space: nowrap;
         }
 
         .contact-link--accent:hover {
@@ -834,7 +851,7 @@
         /* ===== RESPONSIVE ===== */
         @media (max-width: 640px) {
             html {
-                font-size: 14px;
+                font-size: 15px;
             }
 
             .container {
@@ -880,6 +897,7 @@
     </style>
 </head>
 <body>
+    <noscript><div><img src="https://mc.yandex.ru/watch/111807312" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
     <a href="#main-content" class="skip-link">Перейти к содержимому</a>
     <main class="container" id="main-content">
         <!-- Header -->
@@ -907,6 +925,7 @@
                 <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
                 </svg>
+                <span class="contact-link-label">Резюме PDF</span>
             </a>
             <a href="https://anvart.ru/" target="_blank" rel="noopener noreferrer" class="contact-link" title="anvart.ru" aria-label="Личный сайт anvart.ru">
                 <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
