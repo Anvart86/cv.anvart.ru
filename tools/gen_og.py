@@ -44,7 +44,7 @@ body{{font-family:'Inter',sans-serif;background:#ffffff;color:#030712;position:r
     <div class="rule"></div>
     <div class="line">16+ лет в строительной отрасли</div>
     <div class="tags">BIM / ТИМ &nbsp;•&nbsp; 5D QTO &nbsp;•&nbsp; AI-автоматизация</div>
-    <div class="eff">Экономический эффект: 40+ млн ₽/год</div>
+    <div class="eff">Экономический эффект: ~40 млн ₽/год</div>
     <div class="foot">Челябинск, Россия &nbsp;•&nbsp; Готов к переезду &nbsp;•&nbsp; <b>cv.anvart.ru</b></div>
   </div>
 </div>
@@ -56,8 +56,8 @@ async def main():
         pg = await b.new_page(viewport={'width':1200,'height':630}, device_scale_factor=2)
         await pg.set_content(HTML, wait_until='networkidle')
         await pg.wait_for_timeout(400)
-        await pg.screenshot(path=str(CV/'og-image.png'), clip={'x':0,'y':0,'width':1200,'height':630})
+        await pg.screenshot(path=str(CV/'og-image-v3.png'), clip={'x':0,'y':0,'width':1200,'height':630})
         await b.close()
-        print('og-image.png сгенерирован')
+        print('og-image-v3.png сгенерирован')
 
 asyncio.run(main())

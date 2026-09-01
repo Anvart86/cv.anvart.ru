@@ -133,8 +133,8 @@ a{{color:#111827;}}
   </div>
   <div>
     <h2 style="margin-top:0;">Сертификаты</h2>
-    <div class="row"><span>Международная сертификация BIM-менеджеров</span><span class="per">2024</span></div>
-    <div class="row"><span>BIM-менеджер — ПСС</span><span class="per">2024</span></div>
+    <div class="row"><span><a href="https://pssbim.ru/pbs-bim-manager-certificate/">BIM Manager «Design» — ПБС/PBC, Международная система сертификации BIM-менеджеров (ООО «ПСС»), сертификат PBC.BM.24.12</a> <span class="muted">· проверка: pssbim.ru</span></span><span class="per">2024</span></div>
+    <div class="row"><span>Курс «BIM-менеджер» — ПСС, одобрен Университетом Минстроя России: Revit, Navisworks, BIM 360, Solibri, Vitro-CAD, NanoCAD, Renga</span><span class="per">2024</span></div>
     <div class="row"><span>Эффективный руководитель — Н.В. Гаврилова</span><span class="per">2023</span></div>
     <div class="row"><span>English Intermediate — The English Club</span><span class="per">2022</span></div>
   </div>
