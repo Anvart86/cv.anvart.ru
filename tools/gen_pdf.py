@@ -16,7 +16,7 @@ HTML = f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><style>
   unicode-range:U+0000-00FF,U+2000-206F,U+20AC,U+2122,U+2212;}}
 *{{margin:0;padding:0;box-sizing:border-box;}}
 body{{font-family:'Inter',sans-serif;color:#1f2937;font-size:10.2pt;line-height:1.5;}}
-.page{{padding:34px 44px;}}
+.page{{padding:26px 40px;}}
 header{{display:flex;gap:22px;align-items:center;border-bottom:2px solid #111827;padding-bottom:16px;margin-bottom:16px;}}
 .photo{{width:96px;height:96px;border-radius:50%;object-fit:cover;flex:none;}}
 h1{{font-size:23pt;font-weight:800;letter-spacing:-0.02em;color:#030712;}}
@@ -27,8 +27,8 @@ h1{{font-size:23pt;font-weight:800;letter-spacing:-0.02em;color:#030712;}}
 .sep{{color:#d1d5db;margin:0 7px;}}
 .summary{{font-size:10.2pt;color:#374151;margin-bottom:16px;}}
 h2{{font-size:10.5pt;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:#111827;
-  border-bottom:1px solid #e5e7eb;padding-bottom:4px;margin:14px 0 9px;}}
-.item{{margin-bottom:11px;}}
+  border-bottom:1px solid #e5e7eb;padding-bottom:3px;margin:12px 0 8px;}}
+.item{{margin-bottom:10px;}}
 .ihead{{display:flex;justify-content:space-between;align-items:baseline;gap:12px;}}
 .co{{font-weight:700;color:#111827;font-size:10.6pt;}}
 .per{{font-size:8.8pt;color:#6b7280;white-space:nowrap;flex:none;}}
@@ -100,7 +100,7 @@ a{{color:#111827;}}
   <b>Меркурий</b> (mercurius.golos.click). Считает объёмы и себестоимость прямо из BIM-модели. 13 проектов / 464 966 м²; точность к факту — в пределах 5%; расчёт ВОР за неделю вместо месяца, сэкономлено 8 259 чел-ч. Обеспечил тендеры по моделям на объём свыше 1 млрд ₽. Второй год в эксплуатации. &nbsp;•&nbsp;
   <b>Revit-ферма (AI-агенты).</b> Система автономных ИИ-агентов на Revit (этап опытного тестирования): автономная подготовка строительной модели, проверка рабочей и сметной документации, ежесуточные сводки по проекту. Работают ночной фермой на нескольких версиях Revit, с автоматической самопроверкой объёмов (сверка модели до/после). &nbsp;•&nbsp;
   <b>Цифровая исп. документация.</b> Перевёл исполнительную документацию в цифру через СОД (Signal Docs / EXON) на 2 объектах: 204 участника строительства, РД на площадке за 1 минуту вместо 15 дней. Эффект — ~10 млн ₽/год. &nbsp;•&nbsp;
-  <b>AI-автоматизация.</b> AI-агенты, LLM и n8n-сценарии, снимающие рутину при работе с данными в строительстве. В работе: аудит ведомостей объёмов и калькуляций перед выгрузкой в 1С (задвоения, количества, отклонения цен от рыночных; LLM сопоставляет материалы со справочниками); проверка дублей документации по всем проектам СОД дважды в неделю с отчётом в Telegram и на почту; ежесуточные сводки ночной Revit-фермы в мессенджер. &nbsp;•&nbsp;
+  <b>AI-автоматизация.</b> AI-агенты, LLM и n8n-сценарии, снимающие рутину при работе с данными в строительстве. В работе: аудит ведомостей объёмов и калькуляций перед выгрузкой в 1С (задвоения, количества, отклонения цен от рыночных; LLM сопоставляет материалы со справочниками); проверка дублей документации по всем проектам СОД дважды в неделю с отчётом в мессенджер и на почту; ежесуточные сводки ночной Revit-фермы. Уведомления команды перевёл в российский мессенджер MAX и Telegram: бот-агент на юрлице — подписка на объекты кнопками, утренняя сводка изменений в СОД, авто-публикация в корпоративный канал. MAX стал основным каналом. &nbsp;•&nbsp;
   <b>Агентная разработка.</b> Внутренние инструменты собираю агентным методом: ставлю цель и ограничения ИИ-агентам (Claude Code, Codex). Так собраны: плагин AgentTIM для Revit (C#, версии 2020–2027) и ночная ферма на нём; сервис аудита смет (Python / FastAPI) со встройкой в Меркурий; инфобот, отвечающий руководителю по объёмам и площадям объектов без входа в систему; модули Меркурия (React / .NET): валидация BIM-моделей, сравнение секций.
 </div>
 
@@ -119,7 +119,7 @@ a{{color:#111827;}}
   <span class="tag">BIM / ТИМ</span><span class="tag">Autodesk Revit</span><span class="tag">5D BIM / QTO</span>
   <span class="tag">EXON</span><span class="tag">ЦУС</span><span class="tag">Signal Docs</span><span class="tag">Autodesk CC</span>
   <span class="tag">1С УСО / ERP</span><span class="tag">MS Excel</span><span class="tag">LLM / AI-агенты</span>
-  <span class="tag">Агентная разработка (agentic engineering)</span><span class="tag">C# / Revit API</span><span class="tag">Python</span><span class="tag">MCP-серверы</span><span class="tag">N8N</span><span class="tag">EIR разработка</span>
+  <span class="tag">Агентная разработка (agentic engineering)</span><span class="tag">C# / Revit API</span><span class="tag">Python</span><span class="tag">MCP-серверы</span><span class="tag">N8N</span><span class="tag">Боты MAX / Telegram</span><span class="tag">EIR разработка</span>
   <span class="tag">Управление командой</span><span class="tag">Сметное дело</span>
 </div>
 
