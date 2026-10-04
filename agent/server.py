@@ -18,6 +18,9 @@
   MAX_PARALLEL  — одновременных обращений к модели (3)
   LOG_DAYS      — сколько дней хранить журнал (90)
   DEV_STATIC    — каталог для раздачи статики (только для локальной отладки)
+  TG_BOT_TOKEN, TG_CHAT_ID — уведомления владельцу в Telegram (нет — уведомления выключены)
+  TG_VAC_DAY    — уведомлений о вакансиях в сутки (20), TG_VAC_IP — с одного IP в сутки (3)
+  DIGEST_HOUR   — час ежедневной сводки по Екатеринбургу (20)
 """
 import hashlib
 import html
@@ -29,6 +32,8 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import unicodedata
+from contextlib import closing
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -47,6 +52,12 @@ LIMIT_DAY_RUB = float(ENV("LIMIT_DAY_RUB", "150"))
 MAX_PARALLEL = int(ENV("MAX_PARALLEL", "3"))
 LOG_DAYS = int(ENV("LOG_DAYS", "90"))
 DEV_STATIC = ENV("DEV_STATIC")
+TG_BOT_TOKEN = ENV("TG_BOT_TOKEN")
+TG_CHAT_ID = ENV("TG_CHAT_ID")
+TG_VAC_DAY = int(ENV("TG_VAC_DAY", "20"))
+TG_VAC_IP = int(ENV("TG_VAC_IP", "3"))
+DIGEST_HOUR = int(ENV("DIGEST_HOUR", "20"))
+EKB = 5 * 3600  # Екатеринбург, UTC+5 без перехода на летнее время — одно место для всех расчётов суток
 
 MAX_BODY = 24_000          # байт тела запроса
 MAX_MSG = 4000             # символов в вопросе или тексте вакансии
@@ -177,7 +188,7 @@ def db():
 
 
 def db_init():
-    with db() as c:
+    with closing(db()) as c:
         c.executescript("""
         CREATE TABLE IF NOT EXISTS hits (ts REAL, ip TEXT);
         CREATE INDEX IF NOT EXISTS hits_ip_ts ON hits(ip, ts);
@@ -185,6 +196,11 @@ def db_init():
         CREATE TABLE IF NOT EXISTS log (
             ts TEXT, ip TEXT, mode TEXT, question TEXT, answer TEXT, actions TEXT,
             tok_in INTEGER, tok_out INTEGER, rub REAL, ms INTEGER, status TEXT, corpus TEXT);
+        CREATE TABLE IF NOT EXISTS outbox (
+            id INTEGER PRIMARY KEY, key TEXT UNIQUE, kind TEXT, ip TEXT, day TEXT, created REAL,
+            text TEXT, status TEXT DEFAULT 'pending', attempts INTEGER DEFAULT 0, next_at REAL DEFAULT 0,
+            msg_id INTEGER, err TEXT);
+        CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
         """)
         cutoff = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - LOG_DAYS * 86400))
         c.execute("DELETE FROM log WHERE ts < ?", (cutoff,))
@@ -193,7 +209,7 @@ def db_init():
 def admit(ip):
     """Атомарно: проверить лимиты и сразу засчитать попытку. Возвращает None или причину отказа."""
     now = time.time()
-    day = time.strftime("%Y-%m-%d", time.gmtime(now + 5 * 3600))  # сутки по Екатеринбургу
+    day = ekb_day(now)
     c = db()
     try:
         c.execute("BEGIN IMMEDIATE")
@@ -223,15 +239,23 @@ def admit(ip):
         c.close()
 
 
+def ekb_day(ts):
+    return time.strftime("%Y-%m-%d", time.gmtime(ts + EKB))
+
+
+def utc_iso(ts):
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(ts))
+
+
 def spend(rub):
-    day = time.strftime("%Y-%m-%d", time.gmtime(time.time() + 5 * 3600))
-    with db() as c:
+    day = ekb_day(time.time())
+    with closing(db()) as c:
         c.execute("INSERT INTO daily VALUES (?, 0, ?) ON CONFLICT(day) DO UPDATE SET rub=rub+?", (day, rub, rub))
 
 
 def write_log(**f):
     try:
-        with db() as c:
+        with closing(db()) as c:
             c.execute("INSERT INTO log VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (
                 time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()), f.get("ip"), f.get("mode"),
                 (f.get("question") or "")[:2000], (f.get("answer") or "")[:2000],
@@ -240,6 +264,191 @@ def write_log(**f):
                 f.get("ms", 0), f.get("status"), f.get("corpus")))
     except Exception as e:  # журнал не должен ронять ответ
         print(f"log: {e}", flush=True)
+
+# ---------------------------------------------------------------- уведомления владельцу
+
+_BIDI = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u200e\u200f\u2060\ufeff"
+                                "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069"))
+_URL = re.compile(r"(?i)\b(?:https?|ftp)://\S+|\bwww\.\S+|\btg://\S+")
+_DOMAIN = re.compile(r"(?i)\b[\w-]+(?:\.[\w-]+)*\.(?:ru|com|me|org|net|io|su|kz|by|uz|info|biz|app|link|xyz|top|"
+                     r"online|site|pro|dev|ai|рф)\b")
+_wake = threading.Event()
+
+
+def safe_text(t, limit, one_line=False):
+    """Текст посетителя → безопасный для личного Telegram: без управляющих и bidi-символов,
+    ссылки обезврежены (hxxps, [.]) — кликнуть фишинговую ссылку из уведомления нельзя."""
+    t = "".join(ch for ch in (t or "").translate(_BIDI)
+                if ch in "\n\t" or unicodedata.category(ch)[0] != "C")
+    t = _URL.sub(lambda m: m.group(0).replace("http", "hxxp", 1).replace("tg://", "tg[:]//").replace(".", "[.]"), t)
+    t = _DOMAIN.sub(lambda m: m.group(0).replace(".", "[.]"), t)
+    if one_line:
+        t = re.sub(r"\s+", " ", t)
+    else:
+        t = re.sub(r"[ \t]+", " ", t)
+        t = re.sub(r"\n\s*\n\s*\n+", "\n\n", t)
+    t = t.strip()
+    return t if len(t) <= limit else t[:limit - 1].rstrip() + "…"
+
+
+def enqueue(c, key, kind, ip, text):
+    """Внутри уже открытой транзакции. Дубль ключа молча игнорируется."""
+    now = time.time()
+    c.execute("INSERT OR IGNORE INTO outbox (key, kind, ip, day, created, text) VALUES (?,?,?,?,?,?)",
+              (key, kind, ip, ekb_day(now), now, text[:3800]))
+
+
+def notify_vacancy(ip, vacancy, answer_text):
+    """Уведомление о сопоставленной вакансии. Потолки: TG_VAC_DAY в сутки, TG_VAC_IP с одного IP, повтор текста — нет."""
+    if not (TG_BOT_TOKEN and TG_CHAT_ID):
+        return
+    marks = {m: 0 for m in "✅🟡⚪"}
+    for line in answer_text.splitlines():
+        line = line.strip()
+        if line[:1] in marks:
+            marks[line[:1]] += 1
+    score = (" · ".join(f"{m} {n}" for m, n in marks.items()) if sum(marks.values())
+             else "оценка не распознана")
+    norm = re.sub(r"\s+", " ", vacancy).strip().lower()
+    now = time.time()
+    day = ekb_day(now)
+    first = next((l for l in vacancy.splitlines() if l.strip()), "")
+    text = (f"📄 cv.anvart.ru: посетитель сопоставил вакансию\n"
+            f"{time.strftime('%d.%m %H:%M', time.gmtime(now + EKB))} (Екб) · отправитель анонимный, не проверен\n\n"
+            f"Оценка агента: {score}\n\n"
+            f"Первая строка текста: {safe_text(first, 100, one_line=True)}\n\n"
+            f"Фрагмент:\n{safe_text(vacancy, 700)}")
+    key = f"vac:{day}:{hashlib.sha256(norm.encode()).hexdigest()[:16]}"
+    c = db()
+    try:
+        c.execute("BEGIN IMMEDIATE")
+        n_day = c.execute("SELECT count(*) FROM outbox WHERE kind='vacancy' AND day=?", (day,)).fetchone()[0]
+        n_ip = c.execute("SELECT count(*) FROM outbox WHERE kind='vacancy' AND day=? AND ip=?", (day, ip)).fetchone()[0]
+        if n_day < TG_VAC_DAY and n_ip < TG_VAC_IP:
+            enqueue(c, key, "vacancy", ip, text)
+        c.execute("COMMIT")
+    except Exception:
+        try:
+            c.execute("ROLLBACK")
+        except Exception:
+            pass
+        raise
+    finally:
+        c.close()
+    _wake.set()
+
+
+def last_digest_boundary(now):
+    """Последний момент DIGEST_HOUR:00 по Екатеринбургу, не позже now (UTC-секунды)."""
+    local = now + EKB
+    b = local - (local % 86400) + DIGEST_HOUR * 3600
+    if b > local:
+        b -= 86400
+    return b - EKB
+
+
+def plan_digest():
+    """Сводка за [прошлая граница, последняя граница). Создание задания и сдвиг границы — одна транзакция,
+    поэтому рестарт не даёт ни дубля, ни пропуска; после простоя периоды сливаются в одну догоняющую сводку."""
+    now = time.time()
+    until = last_digest_boundary(now)
+    c = db()
+    try:
+        c.execute("BEGIN IMMEDIATE")
+        row = c.execute("SELECT v FROM meta WHERE k='digest_until'").fetchone()
+        since = float(row[0]) if row else until - 86400
+        if until <= since:
+            c.execute("ROLLBACK")
+            return
+        a, b = utc_iso(since), utc_iso(until)
+        rows = c.execute("SELECT ip, mode, question, answer, status, rub FROM log WHERE ts >= ? AND ts < ?",
+                         (a, b)).fetchall()
+        chat = [r for r in rows if r[1] == "chat" and r[4] == "ok"]
+        if rows:
+            vac = sum(1 for r in rows if r[1] == "vacancy" and r[4] == "ok")
+            limited = sum(1 for r in rows if (r[4] or "").startswith("limit_"))
+            errors = sum(1 for r in rows if (r[4] or "").startswith("model_error"))
+            nosite = sum(1 for r in chat if re.search(r"(?i)на сайте (этого )?нет|нет на сайте|не указан", r[3] or ""))
+            rub = sum(r[5] or 0 for r in rows)
+            visitors = len({r[0] for r in rows})
+            span = (f"{time.strftime('%d.%m %H:%M', time.gmtime(since + EKB))} — "
+                    f"{time.strftime('%d.%m %H:%M', time.gmtime(until + EKB))}")
+            lines = [f"🤖 ИИ-агент cv.anvart.ru — сводка за {span} (Екб)",
+                     f"Посетителей: {visitors} · вопросов: {len(chat)} · вакансий: {vac} · {rub:.0f} ₽".replace(".", ","),
+                     f"Ответов «на сайте этого нет» (примерно): {nosite}"]
+            if limited or errors:
+                lines.append(f"Отказов по лимиту: {limited} · ошибок модели: {errors}")
+            if chat:
+                lines.append("")
+                lines.append("Вопросы (текст посетителей, ссылки обезврежены):")
+                for r in chat[:15]:
+                    lines.append("— " + safe_text(r[2], 150, one_line=True))
+                if len(chat) > 15:
+                    lines.append(f"…и ещё {len(chat) - 15}")
+            enqueue(c, f"digest:{b}", "digest", None, "\n".join(lines))
+        c.execute("INSERT INTO meta VALUES ('digest_until', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(until),))
+        c.execute("COMMIT")
+    except Exception:
+        try:
+            c.execute("ROLLBACK")
+        except Exception:
+            pass
+        raise
+    finally:
+        c.close()
+
+
+def tg_send(text):
+    """Возвращает (message_id, None) или (None, (повторять_ли, пауза_с, описание)). Токен в ошибки не попадает."""
+    body = json.dumps({"chat_id": TG_CHAT_ID, "text": text, "link_preview_options": {"is_disabled": True}}).encode()
+    req = urllib.request.Request(f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage", data=body,
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return json.load(r)["result"]["message_id"], None
+    except urllib.error.HTTPError as e:
+        try:
+            d = json.load(e)
+        except ValueError:
+            d = {}
+        desc = f"{e.code} {d.get('description', '')}"[:200]
+        if e.code == 429:
+            return None, (True, int((d.get("parameters") or {}).get("retry_after", 30)) + 1, desc)
+        return None, (e.code >= 500, 60, desc)
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        return None, (True, 60, type(e).__name__)
+
+
+def deliver():
+    now = time.time()
+    with closing(db()) as c:
+        jobs = c.execute("SELECT id, text, attempts FROM outbox WHERE status='pending' AND next_at <= ? "
+                         "ORDER BY id LIMIT 5", (now,)).fetchall()
+    for jid, text, attempts in jobs:
+        mid, err = tg_send(text)
+        with closing(db()) as c:
+            if mid:
+                c.execute("UPDATE outbox SET status='sent', msg_id=?, attempts=attempts+1 WHERE id=?", (mid, jid))
+                continue
+            retry, pause, desc = err
+            print(f"telegram: задание {jid}: {desc}", flush=True)
+            if retry and attempts + 1 < 8:
+                c.execute("UPDATE outbox SET attempts=attempts+1, next_at=?, err=? WHERE id=?",
+                          (now + pause * (2 ** attempts if pause == 60 else 1), desc, jid))
+            else:
+                c.execute("UPDATE outbox SET status='failed', attempts=attempts+1, err=? WHERE id=?", (desc, jid))
+
+
+def notifier():
+    """Один фоновый поток: планирует сводку и доставляет очередь. Любой сбой — в лог, поток живёт дальше."""
+    while True:
+        try:
+            plan_digest()
+            deliver()
+        except Exception as e:
+            print(f"notifier: {type(e).__name__}: {e}", flush=True)
+        _wake.wait(30)
+        _wake.clear()
 
 # ---------------------------------------------------------------- модель
 
@@ -402,6 +611,11 @@ def answer(payload, ip):
     ms = int((time.time() - t0) * 1000)
     write_log(ip=ip, mode=mode, question=q, answer=text, actions=actions, tok_in=tin, tok_out=tout,
               rub=rub, ms=ms, status="ok", corpus=corpus["hash"])
+    if mode == "vacancy":
+        try:
+            notify_vacancy(ip, q, text)
+        except Exception as e:  # уведомление не должно ронять ответ посетителю
+            print(f"notify: {type(e).__name__}: {e}", flush=True)
     return 200, {"answer": text, "actions": actions,
                  "meta": {"model": MODEL_NAME, "ms": ms, "tokens_in": tin, "tokens_out": tout,
                           "corpus": corpus["hash"]}}
@@ -414,6 +628,7 @@ _parallel = threading.BoundedSemaphore(MAX_PARALLEL)
 class Handler(BaseHTTPRequestHandler):
     server_version = "cv-agent"
     sys_version = ""
+    timeout = 20  # медленный клиент не держит поток дольше 20 с
 
     def log_message(self, fmt, *args):
         pass  # журнал — в SQLite, без IP в stdout
@@ -495,6 +710,9 @@ def main():
         print(f"corpus {c['hash']}: {len(c['text'])} символов, карточек {len(c['cards'])}", flush=True)
     except Exception as e:
         print(f"corpus при старте недоступен: {e}", flush=True)
+    if TG_BOT_TOKEN and TG_CHAT_ID:
+        threading.Thread(target=notifier, name="notifier", daemon=True).start()
+        print("уведомления в Telegram включены", flush=True)
     port = int(ENV("PORT", "8080"))
     print(f"cv-agent :{port}", flush=True)
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()

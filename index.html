@@ -1680,6 +1680,31 @@
         .agent-send svg { width: 18px; height: 18px; }
         .agent-note { font-size: 11.5px; color: var(--color-muted); margin-top: 6px; line-height: 1.35; }
 
+        .agent-copy { margin-top: 10px; }
+        .agent-copy button {
+            border: 1px solid var(--color-accent); background: var(--color-accent); color: var(--color-on-accent);
+            border-radius: 8px; padding: 7px 12px; cursor: pointer; font: 600 13px/1.25 var(--font-sans);
+        }
+        .agent-copy button:hover { background: var(--color-accent-hover); }
+        .agent-copy-hint { display: block; margin-top: 4px; font-size: 12px; color: var(--color-muted); }
+
+        .agent-invite {
+            position: fixed; right: 20px; bottom: 76px; z-index: 899; max-width: 270px;
+            display: flex; align-items: flex-start; gap: 4px;
+            background: var(--color-bg); color: var(--color-text);
+            border: 1px solid var(--color-border); border-radius: 12px; padding: 10px 6px 10px 12px;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, .16); font-family: var(--font-sans);
+            animation: agent-invite-in .25s ease-out;
+        }
+        .agent-invite[hidden] { display: none; }
+        .agent-invite-text {
+            flex: 1; border: none; background: none; color: inherit; cursor: pointer; text-align: left;
+            font: 500 14px/1.4 var(--font-sans); padding: 0;
+        }
+        .agent-invite-text b { color: var(--color-link); font-weight: 600; }
+        .agent-invite-close { flex: none; border: none; background: none; color: var(--color-muted); cursor: pointer; font-size: 17px; line-height: 1; padding: 0 4px; }
+        @keyframes agent-invite-in { from { opacity: 0; transform: translateY(6px); } }
+
         .agent-hl {
             outline: 2px solid var(--color-link); outline-offset: 6px; border-radius: 8px;
             animation: agent-hl-pulse 1.2s ease-in-out 2;
@@ -1702,7 +1727,9 @@
             .agent-msg { max-width: 96%; }
         }
         @media (prefers-reduced-motion: reduce) { .agent-hl { animation: none; } .agent-fab { transition: none; } }
-        @media print { .agent-fab, .agent-panel { display: none !important; } }
+        @media (max-width: 600px) { .agent-invite { right: 16px; bottom: 72px; max-width: calc(100vw - 32px); } }
+        @media (prefers-reduced-motion: reduce) { .agent-invite { animation: none; } }
+        @media print { .agent-fab, .agent-panel, .agent-invite { display: none !important; } }
     </style>
 
     <div class="agent-root" data-agent-skip>
@@ -1710,6 +1737,11 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
             Спросить ИИ-агента
         </button>
+
+        <div class="agent-invite" id="agent-invite" role="status" hidden>
+            <button type="button" class="agent-invite-text" id="agent-invite-text">Есть вакансия? <b>Вставьте её текст</b> — ИИ-агент сопоставит требования с опытом Анвара.</button>
+            <button type="button" class="agent-invite-close" id="agent-invite-close" aria-label="Скрыть подсказку">&times;</button>
+        </div>
 
         <section class="agent-panel" id="agent-panel" role="dialog" aria-modal="false" aria-labelledby="agent-title" hidden>
             <div class="agent-head">
@@ -1862,7 +1894,37 @@
             }
         }
 
-        function botMessage(text, actions, meta, isErr) {
+        function copyText(text) {
+            if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+            return new Promise(function (ok, fail) {
+                var ta = document.createElement('textarea');
+                ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+                document.body.appendChild(ta); ta.select();
+                try { document.execCommand('copy') ? ok() : fail(); } catch (e) { fail(e); }
+                ta.remove();
+            });
+        }
+        // Разбор вакансии уходит руководителю рекрутёра — текст должен быть самодостаточным и вести на сайт.
+        function copyBlock(answer) {
+            var box = el('div', 'agent-copy');
+            var b = el('button', null, 'Скопировать разбор для руководителя');
+            b.type = 'button';
+            var hint = el('span', 'agent-copy-hint', 'Текст с источником и контактами — удобно переслать.');
+            b.addEventListener('click', function () {
+                var text = 'Сопоставление вакансии с опытом Анвара Тухватуллина\n' +
+                    '(ИИ-агент на cv.anvart.ru, отвечает только по тексту сайта)\n\n' + answer +
+                    '\n\nРезюме: https://cv.anvart.ru/\nTelegram: https://t.me/Anvart86';
+                copyText(text).then(function () {
+                    b.textContent = 'Скопировано ✓';
+                    goal('agent_copy');
+                    setTimeout(function () { b.textContent = 'Скопировать разбор для руководителя'; }, 2500);
+                }, function () { hint.textContent = 'Не удалось скопировать — выделите текст ответа вручную.'; });
+            });
+            box.appendChild(b); box.appendChild(hint);
+            return box;
+        }
+
+        function botMessage(text, actions, meta, isErr, isVacancy) {
             var m = el('div', 'agent-msg agent-msg--bot' + (isErr ? ' agent-msg--err' : ''), text);
             var nav = (actions || []).filter(function (a) { return a.tool === 'scroll_to' || a.tool === 'highlight'; });
             if (nav.length) {
@@ -1878,6 +1940,7 @@
             }
             var sb = suggestButtons(actions);
             if (sb) m.appendChild(sb);
+            if (isVacancy && !isErr) m.appendChild(copyBlock(text));
             if (meta || (actions && actions.length)) {
                 var lines = [];
                 (actions || []).forEach(function (a) {
@@ -1946,7 +2009,7 @@
                         runActions(fallback);
                         return;
                     }
-                    botMessage(res.d.answer, res.d.actions, res.d.meta);
+                    botMessage(res.d.answer, res.d.actions, res.d.meta, false, isVac);
                     history.push({ role: 'user', content: isVac ? '[текст вакансии]' : text });
                     history.push({ role: 'assistant', content: res.d.answer });
                     store();
@@ -1989,7 +2052,42 @@
             if (!silent) fab.focus();
         }
 
-        fab.addEventListener('click', openPanel);
+        // Приглашение: один раз за визит — через 25 с на странице или при прокрутке до «Проектов».
+        var invite = document.getElementById('agent-invite');
+        var inviteDone = false;
+        try { inviteDone = sessionStorage.getItem('agent-invite') === '1'; } catch (e) {}
+        function hideInvite() {
+            invite.hidden = true; inviteDone = true;
+            try { sessionStorage.setItem('agent-invite', '1'); } catch (e) {}
+        }
+        function showInvite() {
+            if (inviteDone || started || !panel.hidden) return;
+            var v = document.getElementById('viewer-overlay');
+            if (v && v.classList.contains('active')) return;
+            invite.hidden = false;
+            goal('agent_invite_shown');
+            inviteDone = true;
+            try { sessionStorage.setItem('agent-invite', '1'); } catch (e) {}
+        }
+        if (!inviteDone) {
+            setTimeout(showInvite, 25000);
+            var proj = document.getElementById('projects');
+            if (proj && 'IntersectionObserver' in window) {
+                var io = new IntersectionObserver(function (en) {
+                    if (en[0].isIntersecting) { io.disconnect(); setTimeout(showInvite, 1500); }
+                });
+                io.observe(proj);
+            }
+        }
+        document.getElementById('agent-invite-close').addEventListener('click', hideInvite);
+        document.getElementById('agent-invite-text').addEventListener('click', function () {
+            hideInvite();
+            goal('agent_invite_click');
+            openPanel();
+            setMode('vacancy');
+        });
+
+        fab.addEventListener('click', function () { if (!invite.hidden) hideInvite(); openPanel(); });
         document.getElementById('agent-close').addEventListener('click', function () { closePanel(); });
         document.getElementById('agent-mode-off').addEventListener('click', function () { setMode('chat'); });
         techBtn.addEventListener('click', function () {
