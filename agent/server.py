@@ -57,6 +57,7 @@ TG_CHAT_ID = ENV("TG_CHAT_ID")
 TG_VAC_DAY = int(ENV("TG_VAC_DAY", "20"))
 TG_VAC_IP = int(ENV("TG_VAC_IP", "3"))
 DIGEST_HOUR = int(ENV("DIGEST_HOUR", "20"))
+TEST_IP = "test"  # проверки владельца (заголовок X-Agent-Test: 1): в журнале, но не в сводке и уведомлениях
 EKB = 5 * 3600  # Екатеринбург, UTC+5 без перехода на летнее время — одно место для всех расчётов суток
 
 MAX_BODY = 24_000          # байт тела запроса
@@ -361,8 +362,8 @@ def plan_digest():
             c.execute("ROLLBACK")
             return
         a, b = utc_iso(since), utc_iso(until)
-        rows = c.execute("SELECT ip, mode, question, answer, status, rub FROM log WHERE ts >= ? AND ts < ?",
-                         (a, b)).fetchall()
+        rows = c.execute("SELECT ip, mode, question, answer, status, rub FROM log WHERE ts >= ? AND ts < ? "
+                         "AND ip IS NOT ?", (a, b, TEST_IP)).fetchall()
         chat = [r for r in rows if r[1] == "chat" and r[4] == "ok"]
         if rows:
             vac = sum(1 for r in rows if r[1] == "vacancy" and r[4] == "ok")
@@ -611,7 +612,7 @@ def answer(payload, ip):
     ms = int((time.time() - t0) * 1000)
     write_log(ip=ip, mode=mode, question=q, answer=text, actions=actions, tok_in=tin, tok_out=tout,
               rub=rub, ms=ms, status="ok", corpus=corpus["hash"])
-    if mode == "vacancy":
+    if mode == "vacancy" and ip != TEST_IP:
         try:
             notify_vacancy(ip, q, text)
         except Exception as e:  # уведомление не должно ронять ответ посетителю
@@ -645,6 +646,8 @@ class Handler(BaseHTTPRequestHandler):
     def _ip(self):
         # Сервис доступен только через Caddy, а Caddy не доверяет входящему X-Forwarded-For
         # и ставит адрес клиента сам — поэтому первому значению можно верить.
+        if self.headers.get("X-Agent-Test") == "1":
+            return TEST_IP  # посетитель может пометить себя тестом — этим он только прячется из сводки
         ip = (self.headers.get("X-Forwarded-For") or self.client_address[0]).split(",")[0].strip()
         return hashlib.sha256((IP_SALT + ip).encode()).hexdigest()[:16]
 
